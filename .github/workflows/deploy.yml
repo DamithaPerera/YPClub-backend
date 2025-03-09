@@ -9,6 +9,16 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
@@ -23,6 +33,9 @@ jobs:
 
       - name: Run unit tests
         run: npm test
+        env:
+          MONGO_URI: ${{ vars.DATABASE_PASSWORD }}
+          JWT_SECRET: ${{ vars.JWT }}
 
   deploy:
     needs: build-and-test
@@ -38,11 +51,18 @@ jobs:
 
       - name: Deploy via SSH
         run: |
+          echo "Connecting to EC2..."
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
+            echo "Connected to EC2"
             cd /home/ec2-user
+            echo "Removing old project..."
             rm -rf YPClub-backend
+            echo "Cloning latest repo..."
             git clone https://github.com/your-github-user/YPClub-backend.git
             cd YPClub-backend
+            echo "Shutting down old containers..."
             docker-compose down
+            echo "Starting new containers..."
             docker-compose up --build -d
+            echo "Deployment complete!"
           EOF
