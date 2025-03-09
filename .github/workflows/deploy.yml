@@ -67,15 +67,18 @@ jobs:
       - name: Start SSH Agent and Add Key
         run: |
           eval "$(ssh-agent -s)"
-          echo "${{ secrets.AWS_SSH_KEY }}" | sed 's/\\n/\n/g' | ssh-add -
-          ssh-add -l  # Debugging: List added keys
+          echo "${{ secrets.AWS_SSH_KEY }}" | base64 --decode > private_key.pem
+          chmod 600 private_key.pem
+          ssh-add private_key.pem
+          ssh-add -l  # Debugging: Check if key is added
 
       - name: Debug SSH Connection
         run: |
           echo "🔍 Checking SSH Configuration..."
           echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
           echo "SSH User: ${{ secrets.SSH_USER }}"
-          ssh -vvv -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} "echo '✅ SSH Connected Successfully'"
+          ls -lah private_key.pem  # Check if the key file exists
+          ssh -vvv -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} "echo '✅ SSH Connected Successfully'"
 
       - name: Deploy to EC2
         run: |
