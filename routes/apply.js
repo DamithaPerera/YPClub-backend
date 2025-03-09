@@ -13,17 +13,16 @@ const applyLimiter = rateLimit({
 router.post('/', applyLimiter, async (req, res) => {
     try {
         const { jobId } = req.body;
-        const userId = req.user.id;
 
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ message: 'Job not found' });
 
-        const existingApp = await Application.findOne({ job: jobId, user: userId });
+        const existingApp = await Application.findOne({ job: jobId });
         if (existingApp) {
             return res.status(400).json({ message: 'Already applied for this job' });
         }
 
-        const application = new Application({ job: jobId, user: userId });
+        const application = new Application({ job: jobId });
         await application.save();
         res.status(201).json(application);
     } catch (error) {
