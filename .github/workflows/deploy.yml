@@ -1,92 +1,36 @@
-name: CI/CD Pipeline - Deploy Node.js + Redis + RabbitMQ
+deploy:
+  needs: build-and-test
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: # Allows manual trigger
+    - name: Start SSH Agent and Add Key (Proper Formatting)
+      run: |
+        eval "$(ssh-agent -s)"
+        echo -e "${{ secrets.AWS_SSH_KEY }}" | tr -d '\r' | ssh-add -
+        ssh-add -l  # Debugging: Check if key is added
 
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:latest
-        ports:
-          - 6379:6379
-      rabbitmq:
-        image: rabbitmq:3-management
-        ports:
-          - 5672:5672
-          - 15672:15672
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Debug SSH Connection
+      run: |
+        echo "🔍 Checking SSH Configuration..."
+        echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
+        echo "SSH User: ${{ secrets.SSH_USER }}"
+        ssh -vvv -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} "echo '✅ SSH Connected Successfully'"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Wait for RabbitMQ to be ready
-        run: |
-          echo "Waiting for RabbitMQ..."
-          for i in {1..10}; do
-            if nc -z localhost 5672; then
-              echo "RabbitMQ is ready!"
-              exit 0
-            fi
-            echo "RabbitMQ not ready, retrying in 5s..."
-            sleep 5
-          done
-          echo "RabbitMQ failed to start in time"
-          exit 1
-
-      - name: Run unit tests
-        run: npm test
-        env:
-          DATABASE_PASSWORD: ${{ vars.DATABASE_PASSWORD }}
-          JWT_SECRET: ${{ vars.JWT }}
-          SECRET: ${{ vars.SECRET }}
-          PORT: 3001
-          RABBITMQ_URL: amqp://rabbitmq
-
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Start SSH Agent and Add Key
-        run: |
-          eval "$(ssh-agent -s)"
-          echo "${{ secrets.AWS_SSH_KEY }}" | tr -d '\r' | ssh-add -
-          ssh-add -l  # Debug: List added keys
-
-      - name: Debug SSH Connection
-        run: |
-          echo "Checking SSH Configuration..."
-          echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
-          echo "SSH User: ${{ secrets.SSH_USER }}"
-          ssh -vvv -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} "echo '✅ SSH Connected Successfully'"
-
-      - name: Deploy to EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
-            echo "Connected to EC2"
-            cd /home/ec2-user
-            echo "Removing old project..."
-            rm -rf YPClub-backend
-            echo "Cloning latest repo..."
-            git clone https://github.com/your-github-user/YPClub-backend.git
-            cd YPClub-backend
-            echo "Stopping old containers..."
-            docker-compose down
-            echo "Starting new containers..."
-            docker-compose up --build -d
-            echo "Deployment complete!"
-          EOF
+    - name: Deploy to EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
+          echo "🚀 Connected to EC2"
+          cd /home/ec2-user
+          echo "🗑 Removing old project..."
+          rm -rf YPClub-backend
+          echo "📥 Cloning latest repo..."
+          git clone https://github.com/your-github-user/YPClub-backend.git
+          cd YPClub-backend
+          echo "🛑 Stopping old containers..."
+          docker-compose down
+          echo "🚀 Starting new containers..."
+          docker-compose up --build -d
+          echo "✅ Deployment complete!"
+        EOF
