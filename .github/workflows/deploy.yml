@@ -2,9 +2,8 @@ name: CI/CD Pipeline - Deploy Node.js + Redis + RabbitMQ
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch: # Allows manual trigger
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -12,27 +11,16 @@ jobs:
     services:
       redis:
         image: redis:latest
-        ports:
-          - 6379:6379
+        ports: [6379:6379]
       rabbitmq:
         image: rabbitmq:3-management
-        ports:
-          - 5672:5672
-          - 15672:15672
+        ports: [5672:5672, 15672:15672]
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run unit tests
-        run: npm test
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with: { node-version: '18' }
+      - run: npm install
+      - run: npm test
         env:
           DATABASE_PASSWORD: ${{ vars.DATABASE_PASSWORD }}
           JWT_SECRET: ${{ vars.JWT }}
@@ -44,33 +32,24 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-      - name: Setup SSH Key
+      - name: Configure SSH
         run: |
-          echo "${{ secrets.AWS_SSH_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-          ls -la private_key.pem # Debugging step to check key permissions
-
-      - name: Debug SSH Variables
-        run: |
-          echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
-          echo "SSH User: ${{ secrets.SSH_USER }}"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AWS_SSH_KEY }}" | sed 's/\\n/\n/g' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan ${{ secrets.AWS_EC2_IP }} >> ~/.ssh/known_hosts
+          ls -la ~/.ssh # Debug SSH setup
 
       - name: Deploy via SSH
         run: |
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
-            echo "Connected to EC2"
-            cd /home/ec2-user
-            echo "Removing old project..."
-            rm -rf YPClub-backend
-            echo "Cloning latest repo..."
-            git clone https://github.com/your-github-user/YPClub-backend.git
-            cd YPClub-backend
-            echo "Shutting down old containers..."
-            docker-compose down
-            echo "Starting new containers..."
-            docker-compose up --build -d
-            echo "Deployment complete!"
-          EOF
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} \
+              "cd /home/ec2-user && \
+              rm -rf YPClub-backend && \
+              git clone https://github.com/your-github-user/YPClub-backend.git && \
+              cd YPClub-backend && \
+              docker-compose down && \
+              docker-compose up --build -d"
