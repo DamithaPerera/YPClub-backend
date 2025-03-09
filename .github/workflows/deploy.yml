@@ -1,73 +1,92 @@
-name: Secure Production Deployment
+name: CI/CD Pipeline - Deploy Node.js + Redis + RabbitMQ
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     services:
       redis:
-        image: redis:6-alpine
-        ports: [6379:6379]
+        image: redis:latest
+        ports:
+          - 6379:6379
       rabbitmq:
-        image: rabbitmq:3.9-management-alpine
-        ports: [5672:5672]
-        env:
-          RABBITMQ_DEFAULT_USER: guest
-          RABBITMQ_DEFAULT_PASS: guest
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
         with:
           node-version: '18'
-          cache: 'npm'
-      - run: npm ci
-      - run: npm test
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Wait for RabbitMQ to be ready
+        run: |
+          echo "Waiting for RabbitMQ..."
+          for i in {1..10}; do
+            if nc -z localhost 5672; then
+              echo "RabbitMQ is ready!"
+              exit 0
+            fi
+            echo "RabbitMQ not ready, retrying in 5s..."
+            sleep 5
+          done
+          echo "RabbitMQ failed to start in time"
+          exit 1
+
+      - name: Run unit tests
+        run: npm test
         env:
           DATABASE_PASSWORD: ${{ vars.DATABASE_PASSWORD }}
           JWT_SECRET: ${{ vars.JWT }}
           SECRET: ${{ vars.SECRET }}
-          NODE_ENV: test
+          PORT: 3001
+          RABBITMQ_URL: amqp://rabbitmq
 
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-      - name: Configure SSH
+      - name: Start SSH Agent and Add Key
         run: |
           eval "$(ssh-agent -s)"
-          echo "${{ secrets.AWS_SSH_KEY }}" | ssh-add -
-          mkdir -p ~/.ssh
-          ssh-keyscan -t rsa ${{ secrets.AWS_EC2_IP }} >> ~/.ssh/known_hosts
+          echo "${{ secrets.AWS_SSH_KEY }}" | tr -d '\r' | ssh-add -
+          ssh-add -l  # Debug: List added keys
 
-      - name: Deploy Application
+      - name: Debug SSH Connection
         run: |
-          ssh -T -o StrictHostKeyChecking=no \
-            ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'DEPLOY'
-            set -e
+          echo "Checking SSH Configuration..."
+          echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
+          echo "SSH User: ${{ secrets.SSH_USER }}"
+          ssh -vvv -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} "echo '✅ SSH Connected Successfully'"
+
+      - name: Deploy to EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
+            echo "Connected to EC2"
             cd /home/ec2-user
+            echo "Removing old project..."
             rm -rf YPClub-backend
-            git clone https://github.com/your-org/YPClub-backend.git
+            echo "Cloning latest repo..."
+            git clone https://github.com/your-github-user/YPClub-backend.git
             cd YPClub-backend
-
-            # Load production environment variables
-            echo "DATABASE_PASSWORD=$DATABASE_PASSWORD" > .env.production
-            echo "JWT_SECRET=$JWT_SECRET" >> .env.production
-            echo "SECRET=$SECRET" >> .env.production
-
-            docker-compose down --remove-orphans
+            echo "Stopping old containers..."
+            docker-compose down
+            echo "Starting new containers..."
             docker-compose up --build -d
-
-            # Health check
-            sleep 10
-            curl --fail http://localhost:3001/health
-          DEPLOY
-        env:
-          DATABASE_PASSWORD: ${{ vars.DATABASE_PASSWORD }}
-          JWT_SECRET: ${{ vars.JWT }}
-          SECRET: ${{ vars.SECRET }}
+            echo "Deployment complete!"
+          EOF
