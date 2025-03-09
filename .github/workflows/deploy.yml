@@ -51,10 +51,15 @@ jobs:
         run: |
           echo "${{ secrets.AWS_SSH_KEY }}" > private_key.pem
           chmod 600 private_key.pem
+          ls -la private_key.pem # Debugging step to check key permissions
+
+      - name: Debug SSH Variables
+        run: |
+          echo "EC2 IP: ${{ secrets.AWS_EC2_IP }}"
+          echo "SSH User: ${{ secrets.SSH_USER }}"
 
       - name: Deploy via SSH
         run: |
-          echo "Connecting to EC2..."
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
             echo "Connected to EC2"
             cd /home/ec2-user
