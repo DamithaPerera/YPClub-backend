@@ -6,7 +6,7 @@ services:
     container_name: node-backend
     restart: always
     ports:
-      - "3001:3001"
+      - "3002:3001"
     environment:
       - NODE_ENV=production
       - REDIS_URL=redis://redis:6379
