@@ -34,9 +34,11 @@ jobs:
       - name: Run unit tests
         run: npm test
         env:
-          MONGO_URI: ${{ vars.DATABASE_PASSWORD }}
+          DATABASE_PASSWORD: ${{ vars.DATABASE_PASSWORD }}
           JWT_SECRET: ${{ vars.JWT }}
           SECRET: ${{ vars.SECRET }}
+          PORT: 3001
+          RABBITMQ_HOST: localhost
 
   deploy:
     needs: build-and-test
