@@ -1,0 +1,47 @@
+name: CI/CD Pipeline - Deploy Node.js + Redis + RabbitMQ
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run unit tests
+        run: npm test
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.AWS_SSH_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+
+      - name: Deploy via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.SSH_USER }}@${{ secrets.AWS_EC2_IP }} << 'EOF'
+            cd /home/ec2-user
+            rm -rf YPClub-backend
+            git clone https://github.com/your-github-user/YPClub-backend.git
+            cd YPClub-backend
+            docker-compose down
+            docker-compose up --build -d
+          EOF
