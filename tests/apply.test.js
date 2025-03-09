@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken');
 describe('POST /apply', () => {
     let token;
     beforeAll(async () => {
-        // Make sure this secret matches what the middleware uses.
         const secret = process.env.SECRET;
         token = jwt.sign({ id: 'testUser' }, secret);
     });
