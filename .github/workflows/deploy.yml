@@ -36,6 +36,7 @@ jobs:
         env:
           MONGO_URI: ${{ vars.DATABASE_PASSWORD }}
           JWT_SECRET: ${{ vars.JWT }}
+          SECRET: ${{ vars.SECRET }}
 
   deploy:
     needs: build-and-test
