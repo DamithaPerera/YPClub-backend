@@ -6,7 +6,9 @@ const jwt = require('jsonwebtoken');
 describe('POST /apply', () => {
     let token;
     beforeAll(async () => {
-        token = jwt.sign({ id: 'testUser' }, 'your_jwt_secret');
+        // Make sure this secret matches what the middleware uses.
+        const secret = process.env.SECRET;
+        token = jwt.sign({ id: 'testUser' }, secret);
     });
 
     afterAll(async () => {
@@ -21,5 +23,4 @@ describe('POST /apply', () => {
         expect(response.statusCode).toBe(404);
         expect(response.body.message).toMatch(/Job not found/);
     });
-
 });
