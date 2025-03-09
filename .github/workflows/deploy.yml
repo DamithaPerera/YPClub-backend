@@ -64,11 +64,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Start SSH Agent and Add Key (Proper Formatting)
+      - name: Start SSH Agent and Add Key
         run: |
           eval "$(ssh-agent -s)"
-          echo -e "${{ secrets.AWS_SSH_KEY }}" | tr -d '\r' | ssh-add -
-          ssh-add -l  # Debugging: Check if key is added
+          echo "${{ secrets.AWS_SSH_KEY }}" | tr -d '\r' | ssh-add -
+          ssh-add -l  # Debug: Check if key is added
 
       - name: Debug SSH Connection
         run: |
