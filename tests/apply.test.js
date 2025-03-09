@@ -2,16 +2,22 @@ const request = require('supertest');
 const app = require('../app');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
+const { closeRabbitMQ } = require('../rabbitmq');
 
 describe('POST /apply', () => {
     let token;
+
     beforeAll(async () => {
         const secret = process.env.SECRET;
         token = jwt.sign({ id: 'testUser' }, secret);
     });
 
     afterAll(async () => {
+        console.log("Closing MongoDB connection...");
         await mongoose.connection.close();
+
+        console.log("Closing RabbitMQ connection...");
+        await closeRabbitMQ(); // This will now properly close both channel & connection
     });
 
     it('should return 404 if job does not exist', async () => {
