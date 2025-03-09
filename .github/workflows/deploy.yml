@@ -67,7 +67,7 @@ jobs:
       - name: Start SSH Agent and Add Key
         run: |
           eval "$(ssh-agent -s)"
-          echo "${{ secrets.AWS_SSH_KEY }}" | base64 --decode | tr -d '\r' | ssh-add -
+          echo "${{ secrets.AWS_SSH_KEY }}" | sed 's/\\n/\n/g' | ssh-add -
           ssh-add -l  # Debugging: List added keys
 
       - name: Debug SSH Connection
